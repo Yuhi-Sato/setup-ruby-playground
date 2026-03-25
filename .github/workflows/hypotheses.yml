@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  slim-create-cache:
+  slim_create_cache:
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
@@ -30,13 +30,13 @@ jobs:
 
       - run: ruby -e "require 'bundler'; Bundler.require; puts 'slim: mysql2 loaded successfully'"
 
-  latest-use-cache:
-    needs: slim-create-cache
+  latest_use_cache:
+    needs: slim_create_cache
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Hypothesis 2: Check if libmariadb exists on ubuntu-latest (BEFORE setup-ruby)"
+      - name: Check if libmariadb exists on ubuntu-latest before setup-ruby
         run: |
           echo "=== ldconfig - mysql/mariadb related ==="
           ldconfig -p | grep -E "mysql|mariadb" || echo "No mysql/mariadb libraries found"
@@ -53,7 +53,7 @@ jobs:
           bundler: '4.0.0'
           bundler-cache: true
 
-      - name: "Hypothesis 1 & 3: Check cache restore and bundle install behavior"
+      - name: Check cache restore and bundle install behavior
         run: |
           echo "=== Cache key (check setup-ruby log above for key and hit/miss) ==="
           echo ""
