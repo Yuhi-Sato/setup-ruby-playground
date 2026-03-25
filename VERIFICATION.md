@@ -9,15 +9,17 @@
 - `ruby/setup-ruby`のキャッシュキーは `setup-ruby-bundler-cache-v6-{OS}-{ARCH}-{RUBY}-...` の形式
 - `ubuntu-latest`と`ubuntu-slim`は共にUbuntu 24.04であり、**キャッシュキーが一致する**
 - mysql2 gemはC拡張を持ち、ビルド時にリンクされた共有ライブラリ(.so)に依存する
+- GitHub Actionsのキャッシュは同一キーでは上書きされない（最初に作成されたものが優先）
 
 ## 検証環境
 
 | 項目 | 値 |
 |------|-----|
-| Ruby | 3.3 / 4.0.0 |
+| Ruby | 3.3 / 4.0.0 / 4.0.2 |
 | Bundler | 4.0.0 |
 | Gem | mysql2 0.5.7 |
 | ランナー | ubuntu-latest (Ubuntu 24.04.3), ubuntu-slim (Ubuntu 24.04.4) |
+| リポジトリ | [Yuhi-Sato/setup-ruby-playground](https://github.com/Yuhi-Sato/setup-ruby-playground) |
 
 ## 検証1: ubuntu-latest → ubuntu-slim でキャッシュ復元
 
@@ -116,10 +118,63 @@ Gem Load Error is: libmysqlclient.so.21: cannot open shared object file: No such
 
 **仮説は棄却。** Rubyバージョンの変更自体はキャッシュの不整合を引き起こさない。Rubyバージョンに関係なく、根本原因はランナー間のシステムライブラリの差異にある。
 
-## 結論
+## 検証5: Rubyバージョンアップ後に正常動作していたワークフローが壊れるシナリオ
 
-- `ubuntu-latest`と`ubuntu-slim`は同じUbuntu 24.04ベースのため、setup-rubyのキャッシュキーが一致する
-- しかし、プリインストールされているシステムライブラリが異なる（`libmysqlclient` vs `libmariadb`）
-- C拡張を持つgemのキャッシュを異なるランナー間で共有すると、共有ライブラリの不整合によりロードエラーが発生する
-- この問題はどちらの方向でも発生する（ubuntu-latest → ubuntu-slim、ubuntu-slim → ubuntu-latest）
-- **setup-rubyのキャッシュキーにランナーラベル（`ubuntu-latest` / `ubuntu-slim`）が含まれていないことが根本原因**
+### 仮説
+
+ubuntu-slimのワークフローはキャッシュ削除後に何度実行しても成功していた。しかしRubyのバージョンアップ後、別のワークフロー（ubuntu-latest）が先に新バージョンのキャッシュを作成してしまうことで、ubuntu-slimのワークフローが失敗するようになる。
+
+### 手順
+
+1. 全キャッシュを削除
+2. Ruby 4.0.0でubuntu-slimワークフロー（verify-no-cache）を実行 → **成功**（キャッシュ作成）
+3. 同ワークフローを再実行 → **成功**（キャッシュヒットで正常動作を確認）
+4. Rubyを4.0.2にバージョンアップ
+5. verify-cacheワークフローを実行（create-cache → consume-cache）
+
+### 結果
+
+| ステップ | ワークフロー | ランナー | Ruby | 結果 |
+|---------|-------------|---------|------|------|
+| 2 | verify-no-cache | ubuntu-slim | 4.0.0 | 成功（新規ビルド・キャッシュ作成） |
+| 3 | verify-no-cache | ubuntu-slim | 4.0.0 | 成功（キャッシュヒット） |
+| 5-a | verify-cache / create-cache | ubuntu-latest | 4.0.2 | 成功（新キーでキャッシュ作成） |
+| 5-b | verify-cache / consume-cache | ubuntu-slim | 4.0.2 | **失敗** |
+
+### 失敗時のエラー
+
+```
+Bundler::GemRequireError: There was an error while trying to load the gem 'mysql2'.
+Gem Load Error is: libmysqlclient.so.21: cannot open shared object file: No such file or directory
+```
+
+### 分析
+
+1. Ruby 4.0.0では、ubuntu-slimが先にキャッシュを作成していたため、キャッシュは`libmariadb.so.3`にリンクされたバイナリを含んでいた → ubuntu-slimで正常動作
+2. Ruby 4.0.2にバージョンアップすると、キャッシュキーが`ruby-4.0.0`→`ruby-4.0.2`に変わり、既存キャッシュは使われない
+3. verify-cacheのcreate-cache（ubuntu-latest）が先に実行され、`libmysqlclient.so.21`にリンクされたバイナリで新キャッシュを作成
+4. consume-cache（ubuntu-slim）がそのキャッシュを復元するが、`libmysqlclient.so.21`が存在しないため失敗
+
+**仮説は検証された。** Rubyのバージョンアップはキャッシュキーをリセットするため、どのランナーが最初にキャッシュを作成するかの「競争」が再び発生する。ubuntu-latestが先にキャッシュを作成した場合、ubuntu-slimのワークフローが壊れる。
+
+## 総括
+
+### 根本原因
+
+`ruby/setup-ruby`のキャッシュキーにランナーラベル（`ubuntu-latest` / `ubuntu-slim`）が含まれていない。両ランナーは同じUbuntu 24.04をベースとしているため、キャッシュキーが一致するが、プリインストールされているシステムライブラリが異なる。
+
+### 影響
+
+C拡張を持つgem（mysql2, pg, nokogiriなど）をビルドする際、リンクされる共有ライブラリがランナーによって異なる。キャッシュが共有されると、ビルド環境と実行環境の不整合により`LoadError`や`Bundler::GemRequireError`が発生する。
+
+### 問題が顕在化するタイミング
+
+- **Rubyのバージョンアップ時**: キャッシュキーがリセットされ、最初にキャッシュを作成するランナーが変わる可能性がある
+- **キャッシュの有効期限切れ時**: 同様にキャッシュの再作成が発生する
+- **新しいランナータイプの導入時**: 異なるシステムライブラリを持つランナーが追加された場合
+
+### 対策案
+
+1. **`cache-version`を利用してランナーごとにキャッシュキーを分離する**: setup-rubyの`cache-version`入力にランナーラベルを含める
+2. **C拡張を持つgemを含むプロジェクトでは`bundler-cache: true`を使わず、手動でキャッシュを管理する**: `actions/cache`を使ってランナーラベルをキャッシュキーに含める
+3. **全ランナーで同じシステムライブラリをインストールする**: ビルド環境を統一する
