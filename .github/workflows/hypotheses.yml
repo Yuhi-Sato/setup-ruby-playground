@@ -1,6 +1,9 @@
 name: Verify hypotheses
 
 on:
+  push:
+    paths:
+      - '.github/workflows/hypotheses.yml'
   workflow_dispatch:
 
 jobs:
