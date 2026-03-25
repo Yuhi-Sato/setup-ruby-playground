@@ -87,7 +87,34 @@ LoadError: libmariadb.so.3: cannot open shared object file: No such file or dire
 
 ## 検証4: Ruby 4.0.0での再現確認
 
-Ruby 3.3 → 4.0.0に変更しても、同じエラーが再現することを確認。bundleパスは`vendor/bundle/ruby/4.0.0`に変わるが、キャッシュキーの不整合問題は同様に発生する。
+### 仮説
+
+Ruby 3.3 → 4.0.0に変更すると、bundleパスが`vendor/bundle/ruby/3.3.0` → `vendor/bundle/ruby/4.0.0`に変わる。このパス変更によりキャッシュの不整合が発生して失敗するのではないか。
+
+### 手順
+
+1. 全キャッシュを削除
+2. `verify-cache.yml`の`ruby-version`を`4.0.0`に変更
+3. ワークフローを実行（create-cache → consume-cache）
+
+### 結果: 失敗（ただし仮説とは異なる原因）
+
+```
+Bundler::GemRequireError: There was an error while trying to load the gem 'mysql2'.
+Gem Load Error is: libmysqlclient.so.21: cannot open shared object file: No such file or directory
+  - vendor/bundle/ruby/4.0.0/gems/mysql2-0.5.7/lib/mysql2/mysql2.so
+```
+
+### 分析
+
+- bundleパスは確かに`vendor/bundle/ruby/4.0.0`に変わっている
+- しかし、setup-rubyのキャッシュキーにはRubyバージョンが含まれている（`ruby-4.0.0`）ため、Ruby 3.3のキャッシュとは別キーになり、パス変更による不整合は発生しない
+- 失敗の原因はパス変更ではなく、**検証1と同じ`libmysqlclient.so.21`の不在**
+- キャッシュキーが`ubuntu-24.04-x64-ruby-4.0.0-...`で両ランナー共通のため、ubuntu-latestでビルドされたバイナリがそのままubuntu-slimに復元された
+
+### 結論
+
+**仮説は棄却。** Rubyバージョンの変更自体はキャッシュの不整合を引き起こさない。Rubyバージョンに関係なく、根本原因はランナー間のシステムライブラリの差異にある。
 
 ## 結論
 
