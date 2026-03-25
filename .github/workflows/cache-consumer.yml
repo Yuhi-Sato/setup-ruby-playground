@@ -34,4 +34,4 @@ jobs:
           ldd $(find $BUNDLE_PATH -name "mysql2.so" 2>/dev/null || find $(bundle show mysql2) -name "mysql2.so" 2>/dev/null) || true
 
       - name: Try to load mysql2 (expect failure)
-        run: bundle exec ruby -e "require 'mysql2'; puts 'mysql2 loaded successfully'"
+        run: bundle exec ruby -e "require 'bundler/setup'; Bundler.require; puts 'mysql2 loaded successfully'"
