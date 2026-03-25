@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '4.0.0'
+          ruby-version: '4.0.3'
           bundler: '4.0.0'
           bundler-cache: true
       - run: bundle exec ruby -e "require 'mysql2'; puts 'mysql2 loaded successfully'"
@@ -23,7 +23,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libmariadb-dev
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '4.0.0'
+          ruby-version: '4.0.3'
           bundler: '4.0.0'
           bundler-cache: true
       - run: ruby -e "require 'bundler'; Bundler.require"
