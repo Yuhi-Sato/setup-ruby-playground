@@ -1,4 +1,4 @@
-name: Verify hypotheses - why latest succeeds after slim cache
+name: Verify hypotheses
 
 on:
   workflow_dispatch:
