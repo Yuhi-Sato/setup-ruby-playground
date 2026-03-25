@@ -1,0 +1,64 @@
+name: Verify hypotheses - why latest succeeds after slim cache
+
+on:
+  workflow_dispatch:
+
+jobs:
+  slim-create-cache:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libmariadb-dev
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.2'
+          bundler: '4.0.0'
+          bundler-cache: true
+
+      - name: Debug - slim environment
+        run: |
+          echo "=== Cache key (from setup-ruby log above) ==="
+          echo "=== ldconfig ==="
+          ldconfig -p | grep -E "mysql|mariadb" || true
+          echo ""
+          echo "=== ldd mysql2.so ==="
+          ldd $(find vendor/bundle -name "mysql2.so" 2>/dev/null | head -1) || true
+
+      - run: ruby -e "require 'bundler'; Bundler.require; puts 'slim: mysql2 loaded successfully'"
+
+  latest-use-cache:
+    needs: slim-create-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Hypothesis 2: Check if libmariadb exists on ubuntu-latest (BEFORE setup-ruby)"
+        run: |
+          echo "=== ldconfig - mysql/mariadb related ==="
+          ldconfig -p | grep -E "mysql|mariadb" || echo "No mysql/mariadb libraries found"
+          echo ""
+          echo "=== dpkg - mariadb packages ==="
+          dpkg -l | grep -i mariadb || echo "No mariadb packages installed"
+          echo ""
+          echo "=== dpkg - mysql packages ==="
+          dpkg -l | grep -i mysql || echo "No mysql packages installed"
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.2'
+          bundler: '4.0.0'
+          bundler-cache: true
+
+      - name: "Hypothesis 1 & 3: Check cache restore and bundle install behavior"
+        run: |
+          echo "=== Cache key (check setup-ruby log above for key and hit/miss) ==="
+          echo ""
+          echo "=== ldd mysql2.so ==="
+          ldd $(find vendor/bundle -name "mysql2.so" 2>/dev/null | head -1) || true
+          echo ""
+          echo "=== ldconfig after setup-ruby ==="
+          ldconfig -p | grep -E "mysql|mariadb" || true
+
+      - name: Try to load mysql2
+        run: ruby -e "require 'bundler'; Bundler.require; puts 'latest: mysql2 loaded successfully'"
