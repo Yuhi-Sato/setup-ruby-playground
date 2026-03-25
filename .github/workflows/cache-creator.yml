@@ -14,6 +14,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libmysqlclient-dev
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
       - name: Install Bundler 4.0.0
         run: gem install bundler -v 4.0.0
 
@@ -35,6 +39,9 @@ jobs:
           echo ""
           echo "=== libmysqlclient location ==="
           ldconfig -p | grep mysql || true
+          echo ""
+          echo "=== Bundler version ==="
+          bundle --version
 
       - name: Verify mysql2 loads correctly
         run: bundle exec ruby -e "require 'mysql2'; puts 'mysql2 loaded successfully'"

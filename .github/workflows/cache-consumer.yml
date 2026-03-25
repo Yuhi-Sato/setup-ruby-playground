@@ -14,6 +14,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libmariadb-dev
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
       - name: Install Bundler 4.0.0
         run: gem install bundler -v 4.0.0
 
@@ -35,6 +39,9 @@ jobs:
           echo ""
           echo "=== ldd output ==="
           ldd $(find $BUNDLE_PATH -name "mysql2.so" 2>/dev/null || find $(bundle show mysql2) -name "mysql2.so" 2>/dev/null) || true
+          echo ""
+          echo "=== Bundler version ==="
+          bundle --version
 
       - name: Try to load mysql2 (expect failure)
         run: |
