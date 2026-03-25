@@ -1,0 +1,30 @@
+name: Verify bundler cache issue
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libmysqlclient-dev
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler: '4.0.0'
+          bundler-cache: true
+      - run: bundle exec ruby -e "require 'mysql2'; puts 'mysql2 loaded successfully'"
+
+  consume-cache:
+    needs: create-cache
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libmariadb-dev
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler: '4.0.0'
+          bundler-cache: true
+      - run: ruby -e "require 'bundler'; Bundler.require"
